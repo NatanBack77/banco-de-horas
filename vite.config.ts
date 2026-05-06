@@ -8,7 +8,5 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
-  optimizeDeps: { include: ['sql.js/dist/sql-wasm.js'] },
-  assetsInclude: ['**/*.wasm'],
   server: { host: true, port: 5173 },
 });

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { SettingsProvider } from '@/contexts/SettingsContext';
@@ -18,16 +19,57 @@ import { NotificationsScreen } from '@/screens/NotificationsScreen';
 import { ProfileScreen } from '@/screens/ProfileScreen';
 import { SplashScreen } from '@/screens/SplashScreen';
 
+function InitErrorScreen({ error }: { error: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    const { SCHEMA_PG_STATEMENTS } = await import('@/database/schemaPg');
+    const sql = SCHEMA_PG_STATEMENTS.map(s => s.trim() + ';').join('\n\n');
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copie o SQL abaixo:', sql);
+    }
+  };
+  return (
+    <div className="app-shell min-h-screen flex flex-col items-center justify-center p-6 gap-4">
+      <div className="max-w-lg w-full bg-surface border-2 border-accent/40 rounded-2xl p-6 shadow-[var(--shadow-card)]">
+        <h1 className="text-xl font-bold text-accent mb-2">Falha ao conectar ao banco</h1>
+        <p className="text-sm text-text mb-3 break-words">{error}</p>
+        <ol className="text-xs text-text-muted space-y-1.5 list-decimal list-inside mb-4">
+          <li>Clique em <strong>Copiar SQL do schema</strong> abaixo.</li>
+          <li>Abra o <strong>SQL Editor do Neon</strong> logado como owner do banco.</li>
+          <li>Cole e execute o SQL.</li>
+          <li>Recarregue esta página.</li>
+        </ol>
+        <p className="text-xs text-text-muted mb-3">
+          Alternativa: como owner, conceda permissão à role atual:<br/>
+          <code className="text-[10px] bg-cream px-1 py-0.5 rounded">GRANT USAGE, CREATE ON SCHEMA public TO &lt;sua_role&gt;;</code>
+        </p>
+        <button
+          onClick={() => void onCopy()}
+          className="w-full h-11 rounded-2xl bg-primary text-cream font-semibold hover:bg-primary-dark transition"
+        >
+          {copied ? '✓ SQL copiado' : 'Copiar SQL do schema'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Protected({ children }: { children: React.ReactNode }) {
-  const { user, ready } = useAuth();
+  const { user, ready, initError } = useAuth();
   if (!ready) return <SplashScreen />;
+  if (initError) return <InitErrorScreen error={initError} />;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function PublicOnly({ children }: { children: React.ReactNode }) {
-  const { user, ready } = useAuth();
+  const { user, ready, initError } = useAuth();
   if (!ready) return <SplashScreen />;
+  if (initError) return <InitErrorScreen error={initError} />;
   if (user) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

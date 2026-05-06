@@ -104,14 +104,14 @@ export function ShiftConfigScreen() {
         <Card delay={0.05}>
           <SectionLabel>Horários</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Entrada" value={entry} onChange={(e) => setEntry(e.target.value)} placeholder="08:00" error={errors.entry_time} />
+            <Input label="Entrada" type="time" value={entry} onChange={(e) => setEntry(e.target.value)} error={errors.entry_time} />
             {lunchOn ? (
               <>
-                <Input label="Saída p/ almoço" value={lOut} onChange={(e) => setLOut(e.target.value)} placeholder="12:00" error={errors.lunch_out_time} />
-                <Input label="Retorno almoço" value={lIn} onChange={(e) => setLIn(e.target.value)} placeholder="13:00" error={errors.lunch_in_time} />
+                <Input label="Saída p/ almoço" type="time" value={lOut} onChange={(e) => setLOut(e.target.value)} error={errors.lunch_out_time} />
+                <Input label="Retorno almoço" type="time" value={lIn} onChange={(e) => setLIn(e.target.value)} error={errors.lunch_in_time} />
               </>
             ) : null}
-            <Input label="Saída" value={exit} onChange={(e) => setExit(e.target.value)} placeholder="17:00" error={errors.exit_time} />
+            <Input label="Saída" type="time" value={exit} onChange={(e) => setExit(e.target.value)} error={errors.exit_time} />
           </div>
         </Card>
 

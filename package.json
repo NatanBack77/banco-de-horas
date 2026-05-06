@@ -16,14 +16,12 @@
     "lucide-react": "^0.460.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^6.28.0",
-    "sql.js": "^1.12.0"
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^4.3.0",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.9.2",

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Trash2, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trash2, SlidersHorizontal, Pencil, Save, X } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { deletePunch, listPunchesByMonth } from '@/database/repositories/punchRepo';
+import { deletePunch, listPunchesByMonth, updatePunch } from '@/database/repositories/punchRepo';
 import { listWorkDaysMonth, upsertWorkDay } from '@/database/repositories/workDayRepo';
 import { computeWorkDayFromPunches } from '@/services/calc';
 import { format, formatPtMonth, parse, signedHm } from '@/utils/date';
@@ -24,6 +24,8 @@ export function RecordsScreen() {
   const [punches, setPunches] = useState<PunchRecord[]>([]);
   const [days, setDays] = useState<WorkDay[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTime, setEditTime] = useState('');
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -50,6 +52,27 @@ export function RecordsScreen() {
     await deletePunch(p.id);
     const wd = await computeWorkDayFromPunches(user.id, p.date, shift);
     await upsertWorkDay(wd);
+    bumpVersion();
+    await load();
+  };
+
+  const startEdit = (p: PunchRecord) => {
+    setEditingId(p.id);
+    setEditTime(p.time);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTime('');
+  };
+
+  const saveEdit = async (p: PunchRecord) => {
+    if (!user || !shift) return;
+    if (!/^\d{2}:\d{2}$/.test(editTime)) { alert('Horário inválido (HH:mm)'); return; }
+    await updatePunch(p.id, { time: editTime });
+    const wd = await computeWorkDayFromPunches(user.id, p.date, shift);
+    await upsertWorkDay(wd);
+    cancelEdit();
     bumpVersion();
     await load();
   };
@@ -127,17 +150,46 @@ export function RecordsScreen() {
 
               {isOpen && (
                 <ul className="mt-4 pt-4 border-t border-border space-y-2">
-                  {items.map(p => (
-                    <li key={p.id} className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">{p.type}</span>
-                      <span className="flex items-center gap-2">
-                        <span className="font-semibold text-text">{p.time}</span>
-                        <button onClick={(e) => { e.stopPropagation(); void onDelete(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-accent/10 text-accent">
-                          <Trash2 size={14} />
-                        </button>
-                      </span>
-                    </li>
-                  ))}
+                  {items.map(p => {
+                    const editing = editingId === p.id;
+                    return (
+                      <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-text-muted shrink-0">{p.type}</span>
+                        <span className="flex items-center gap-2">
+                          {editing ? (
+                            <input
+                              type="time"
+                              value={editTime}
+                              onChange={(e) => setEditTime(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-24 px-2 h-8 bg-cream border border-border rounded-lg text-sm font-semibold text-text outline-none focus:border-primary"
+                            />
+                          ) : (
+                            <span className="font-semibold text-text">{p.time}</span>
+                          )}
+                          {editing ? (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); void saveEdit(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-primary/10 text-primary" aria-label="Salvar">
+                                <Save size={14} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-border text-text-muted" aria-label="Cancelar">
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-primary/10 text-primary" aria-label="Editar">
+                                <Pencil size={14} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); void onDelete(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-accent/10 text-accent" aria-label="Apagar">
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Card>

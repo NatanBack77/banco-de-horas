@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Info, X } from 'lucide-react';
+import { Info, X, Pencil, Save } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { cancelUsage, listUsages, sumScheduledMinutes, sumUsedMinutes } from '@/database/repositories/overtimeRepo';
+import { hmToMinutes } from '@/utils/date';
+import { cancelUsage, listUsages, sumScheduledMinutes, sumUsedMinutes, updateUsage } from '@/database/repositories/overtimeRepo';
 import { listWorkDaysMonth } from '@/database/repositories/workDayRepo';
 import { computeBalance } from '@/services/calc';
 import { format, formatPtDate, minutesToHm, signedHm } from '@/utils/date';
@@ -30,6 +31,8 @@ export function MyUsagesScreen() {
   const [tab, setTab] = useState<Tab>('summary');
   const [items, setItems] = useState<OvertimeUsage[]>([]);
   const [stats, setStats] = useState({ available: 0, used: 0, scheduled: 0, after: 0 });
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ duration: '', date: '', reason: '' });
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -46,6 +49,23 @@ export function MyUsagesScreen() {
   const onCancel = async (id: number) => {
     if (!confirm('Cancelar este uso?')) return;
     await cancelUsage(id);
+    bumpVersion();
+    await load();
+  };
+
+  const startEdit = (u: OvertimeUsage) => {
+    setEditId(u.id);
+    const h = String(Math.floor(u.minutes / 60)).padStart(2, '0');
+    const m = String(u.minutes % 60).padStart(2, '0');
+    setEditForm({ duration: `${h}:${m}`, date: u.date, reason: u.reason ?? '' });
+  };
+
+  const saveEdit = async (u: OvertimeUsage) => {
+    if (!/^\d{2}:\d{2}$/.test(editForm.duration)) { alert('Duração inválida (HH:mm)'); return; }
+    const minutes = hmToMinutes(editForm.duration);
+    if (minutes <= 0) { alert('Duração deve ser maior que zero'); return; }
+    await updateUsage(u.id, { minutes, date: editForm.date, reason: editForm.reason || null });
+    setEditId(null);
     bumpVersion();
     await load();
   };
@@ -101,27 +121,78 @@ export function MyUsagesScreen() {
         ) : (
           <>
             {items.length === 0 && <Card delay={0.05}><p className="text-text-muted">Nenhum uso registrado.</p></Card>}
-            {items.map((u, i) => (
-              <Card key={u.id} delay={Math.min(0.4, 0.04 * (i + 1))}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm capitalize text-text font-semibold">{formatPtDate(u.date)}</p>
-                    <p className="text-text-muted text-xs mt-0.5">{u.reason || 'Sem motivo'}</p>
-                    <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_CLS[u.status]}`}>
-                      {STATUS_LABEL[u.status]}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-text">{minutesToHm(u.minutes)}</p>
-                    {u.status !== 'CANCELED' && (
-                      <button onClick={() => onCancel(u.id)} className="mt-2 inline-flex items-center gap-1 text-xs text-accent hover:underline">
-                        <X size={12} /> Cancelar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
+            {items.map((u, i) => {
+              const editing = editId === u.id;
+              return (
+                <Card key={u.id} delay={Math.min(0.4, 0.04 * (i + 1))}>
+                  {editing ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">Duração</span>
+                          <input
+                            type="time"
+                            value={editForm.duration}
+                            onChange={(e) => setEditForm(f => ({ ...f, duration: e.target.value }))}
+                            className="w-full h-10 px-3 bg-cream border border-border rounded-xl text-sm font-semibold text-text outline-none focus:border-primary"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">Data</span>
+                          <input
+                            type="date"
+                            value={editForm.date}
+                            onChange={(e) => setEditForm(f => ({ ...f, date: e.target.value }))}
+                            className="w-full h-10 px-3 bg-cream border border-border rounded-xl text-sm font-semibold text-text outline-none focus:border-primary"
+                          />
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">Motivo</span>
+                        <input
+                          type="text"
+                          value={editForm.reason}
+                          onChange={(e) => setEditForm(f => ({ ...f, reason: e.target.value }))}
+                          placeholder="Opcional"
+                          className="w-full h-10 px-3 bg-cream border border-border rounded-xl text-sm text-text outline-none focus:border-primary"
+                        />
+                      </label>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => void saveEdit(u)} className="flex-1 h-10 rounded-xl bg-primary text-cream text-sm font-semibold inline-flex items-center justify-center gap-1.5">
+                          <Save size={14} /> Salvar
+                        </button>
+                        <button onClick={() => setEditId(null)} className="flex-1 h-10 rounded-xl bg-cream text-brown text-sm font-semibold border border-border">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm capitalize text-text font-semibold">{formatPtDate(u.date)}</p>
+                        <p className="text-text-muted text-xs mt-0.5">{u.reason || 'Sem motivo'}</p>
+                        <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_CLS[u.status]}`}>
+                          {STATUS_LABEL[u.status]}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-text">{minutesToHm(u.minutes)}</p>
+                        {u.status !== 'CANCELED' && (
+                          <div className="flex items-center justify-end gap-2 mt-2">
+                            <button onClick={() => startEdit(u)} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                              <Pencil size={12} /> Editar
+                            </button>
+                            <button onClick={() => onCancel(u.id)} className="inline-flex items-center gap-1 text-xs text-accent hover:underline">
+                              <X size={12} /> Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
           </>
         )}
       </div>

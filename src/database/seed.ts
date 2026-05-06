@@ -10,8 +10,8 @@ import { format, subDays } from 'date-fns';
 export async function seedIfEmpty(): Promise<void> {
   await initDatabase();
   const db = getDb();
-  const c = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n FROM users`);
-  if ((c?.n ?? 0) > 0) return;
+  const c = await db.getFirstAsync<{ n: number | string }>(`SELECT COUNT(*) AS n FROM users`);
+  if (Number(c?.n ?? 0) > 0) return;
 
   const userId = await createUser({
     name: 'João Silva',

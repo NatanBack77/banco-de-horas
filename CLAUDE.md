@@ -1,13 +1,13 @@
 # CLAUDE.md — Banco de Horas (Web)
 
-Webapp controle banco de horas. Marca: **Cajuína São Geraldo**. 100% offline, SQLite WASM browser. Migrado de Expo/RN → Vite/React em 2026-05-06.
+Webapp controle banco de horas. Marca: **Cajuína São Geraldo**. Vite/React + Neon (Postgres serverless). Migrado de Expo/RN → Vite/React em 2026-05-06; SQLite WASM removido em 2026-05-06 em favor do Neon.
 
 ## Stack atual (web-only)
 
 - **Vite 5** + **React 19** + **TypeScript estrito**
 - **Tailwind v4** (`@tailwindcss/vite`) com theme Cajuína em CSS vars (`src/index.css`)
 - **React Router v6** (`BrowserRouter`)
-- **sql.js** (SQLite WASM) + **IndexedDB** persist (`src/database/db.ts`)
+- **Neon Postgres** via `@neondatabase/serverless` HTTP driver (`src/database/db.ts` + `dbPg.ts`). URL em `VITE_DATABASE_URL` (.env). Cache de leitura em localStorage (`bdh_cache_v1:*`) — serve dados antigos quando offline.
 - **localStorage** sessão (substitui expo-secure-store)
 - **framer-motion** (substitui reanimated FadeInDown)
 - **lucide-react** ícones
@@ -85,10 +85,10 @@ Ordem obrigatória: `IN` → `LUNCH_OUT` → `LUNCH_IN` → `OUT`. Validação e
 - Balance = `worked - expected` somente quando dia fechado (`OUT` registrado)
 - `expectedMinutesForDate(shift, date)` zero se dia da semana não está em `shift.active_days`
 
-### Tabelas SQLite (sql.js)
-`users`, `shifts`, `punch_records` (idx `user_id, date`), `work_days` (UNIQUE `user_id, date`), `overtime_usage` (status: USED/SCHEDULED/CANCELED), `notifications`, `settings`, `audit_logs`. FKs ON. (PRAGMA WAL removido — sql.js não suporta.)
+### Tabelas Postgres (Neon)
+`users`, `shifts`, `punch_records` (idx `user_id, date`), `work_days` (UNIQUE `user_id, date`), `overtime_usage` (status: USED/SCHEDULED/CANCELED), `notifications`, `settings`, `audit_logs`. FKs `ON DELETE CASCADE`.
 
-Schema em `src/database/schema.ts`. DB persistida em IndexedDB store `bdh.sqlite[banco_de_horas_db_v1]` via `_db.export()` debounce 250ms após writes.
+Schema em `src/database/schemaPg.ts` — array de `CREATE TABLE IF NOT EXISTS` aplicados em `connectPg`. Repos usam placeholders `?` — `PgDbWrapper` traduz pra `$1, $2, ...` e adiciona `RETURNING id` em INSERTs sem RETURNING explícito. Aggregates (`COUNT`, `SUM`) chegam como string — sempre cast com `Number()`.
 
 ## Tema (Cajuína São Geraldo)
 
@@ -131,7 +131,7 @@ Bottom tabs renderiza FAB central pra `/registrar`.
 
 ## Regras claras
 
-1. **Nunca** quebrar offline-first. Sem chamada rede.
+1. **Online required** para writes (Neon HTTP). Reads servem cache stale em offline.
 2. **Nunca** mexer cores marca / paleta sem pedir.
 3. **Sempre** typecheck (`npm run lint`) antes de declarar feito.
 4. **Sempre** usar `@/` em imports internos.
@@ -147,7 +147,7 @@ Bottom tabs renderiza FAB central pra `/registrar`.
 
 ## Schema migrations
 
-Schema atual `CREATE TABLE IF NOT EXISTS` apenas. Mudança de coluna exige migration explícita (sem framework). Em `db.ts`, adicionar lógica versão (ler `PRAGMA user_version`, ALTER TABLE conforme delta). Não dropar tabela com dados.
+Schema atual `CREATE TABLE IF NOT EXISTS` apenas em `schemaPg.ts`. Mudança de coluna exige `ALTER TABLE` adicionado ao array. Não dropar tabela com dados. `resetDatabase()` em `db.ts` faz drop + recreate (uso em dev/testes apenas).
 
 ## Quando em dúvida
 

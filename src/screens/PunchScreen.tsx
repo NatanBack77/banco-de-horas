@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, Check, X, ChevronRight } from 'lucide-react';
+import { LogIn, LogOut, Check, X, ChevronRight, Clock, Calendar } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
+import { Input } from '@/components/Input';
 import { SectionLabel } from '@/components/SectionLabel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -38,11 +39,14 @@ export function PunchScreen() {
   const [busy, setBusy] = useState<PunchType | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  const t = today();
+  // Permite escolher data/horário manualmente. Botão "Agora" reseta.
+  const [date, setDate] = useState(today());
+  const [time, setTime] = useState(nowHm());
+
   const load = useCallback(async () => {
     if (!user) return;
-    setPunches(await listPunchesByDate(user.id, t));
-  }, [user, t]);
+    setPunches(await listPunchesByDate(user.id, date));
+  }, [user, date]);
   useEffect(() => { void load(); }, [load]);
 
   const rules = user ? rulesFor(user.contract_type) : null;
@@ -53,16 +57,21 @@ export function PunchScreen() {
   const onPunch = async (type: PunchType) => {
     if (!user || !shift) return;
     setMsg(null);
-    const v = validateNextPunch(punches, type);
+    if (!/^\d{2}:\d{2}$/.test(time)) {
+      setMsg({ kind: 'err', text: 'Horário inválido (use HH:mm)' });
+      return;
+    }
+    const v = validateNextPunch(punches, type, time);
     if (!v.ok) { setMsg({ kind: 'err', text: v.reason ?? 'Não permitido' }); return; }
     try {
       setBusy(type);
-      await addPunch({ user_id: user.id, type, date: t, time: nowHm() });
-      const wd = await computeWorkDayFromPunches(user.id, t, shift);
+      await addPunch({ user_id: user.id, type, date, time });
+      const wd = await computeWorkDayFromPunches(user.id, date, shift);
       await upsertWorkDay(wd);
       await load();
       bumpVersion();
-      setMsg({ kind: 'ok', text: `${FULL_LABEL[type]} registrada às ${nowHm()}` });
+      setMsg({ kind: 'ok', text: `${FULL_LABEL[type]} registrada às ${time}` });
+      setTime(nowHm());
     } catch (e: any) {
       setMsg({ kind: 'err', text: e?.message ?? 'Falha ao registrar' });
     } finally {
@@ -85,6 +94,36 @@ export function PunchScreen() {
     <div className="app-shell pb-24">
       <Header title="Registrar ponto" subtitle="Selecione o tipo de registro" back />
       <div className="px-5 space-y-3">
+        <Card delay={0}>
+          <SectionLabel right={
+            <button
+              type="button"
+              onClick={() => { setDate(today()); setTime(nowHm()); }}
+              className="text-xs text-primary font-semibold hover:underline"
+            >
+              Agora
+            </button>
+          }>
+            Horário do ponto
+          </SectionLabel>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Data"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              iconRight={<Calendar size={18} />}
+            />
+            <Input
+              label="Hora"
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              iconRight={<Clock size={18} />}
+            />
+          </div>
+        </Card>
+
         {msg && (
           <Card delay={0} noAnimate className={msg.kind === 'ok' ? 'bg-primary/10 border-primary/30' : 'bg-accent/10 border-accent/30'}>
             <p className={`text-sm font-medium ${msg.kind === 'ok' ? 'text-primary' : 'text-accent'}`}>{msg.text}</p>

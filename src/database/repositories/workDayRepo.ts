@@ -33,8 +33,8 @@ export async function listWorkDaysRange(userId: number, from: string, to: string
 }
 
 export async function sumBalanceAll(userId: number): Promise<number> {
-  const r = await getDb().getFirstAsync<{ s: number }>(
+  const r = await getDb().getFirstAsync<{ s: number | string }>(
     `SELECT COALESCE(SUM(balance_minutes),0) AS s FROM work_days WHERE user_id=?`, userId
   );
-  return r?.s ?? 0;
+  return Number(r?.s ?? 0);
 }

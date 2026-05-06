@@ -15,6 +15,7 @@ import { rulesFor } from '@/services/contract';
 interface AuthCtx {
   user: User | null;
   ready: boolean;
+  initError: string | null;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   register: (input: { name: string; email: string; password: string; contract_type: ContractType }) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -27,19 +28,21 @@ const KEY = 'bdh_user_id';
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         await initDatabase();
-        await seedIfEmpty();
+        try { await seedIfEmpty(); } catch (e) { console.warn('[seed] falhou (provável: role sem INSERT)', e); }
         const id = await SecureStore.getItemAsync(KEY).catch(() => null);
         if (id) {
           const u = await getUser(Number(id));
           setUser(u);
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error('[AuthProvider init] erro:', e);
+        setInitError(e?.message ?? 'Falha ao conectar ao banco');
       } finally {
         setReady(true);
       }
@@ -99,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (u) setUser(u);
   }, [user]);
 
-  return <Ctx.Provider value={{ user, ready, login, register, logout, refresh }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, ready, initError, login, register, logout, refresh }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

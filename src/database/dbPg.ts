@@ -57,11 +57,53 @@ export class PgDbWrapper {
   }
 }
 
+function isPermissionError(e: unknown): boolean {
+  const msg = (e as { message?: string })?.message ?? '';
+  return /permission denied|must be owner/i.test(msg);
+}
+
+function isMissingTableError(e: unknown): boolean {
+  const msg = (e as { message?: string })?.message ?? '';
+  return /relation .* does not exist/i.test(msg);
+}
+
 export async function connectPg(url: string): Promise<PgDbWrapper> {
   const sql = neon(url);
   const wrapper = new PgDbWrapper(sql);
+
+  // Tenta criar schema. Se a role não tiver CREATE em public, ignora silenciosamente
+  // — assume que o owner já criou as tabelas via SQL editor do Neon.
+  let permissionDenied = false;
   for (const stmt of SCHEMA_PG_STATEMENTS) {
-    await sql.query(stmt, []);
+    try {
+      await sql.query(stmt, []);
+    } catch (e) {
+      if (isPermissionError(e)) {
+        permissionDenied = true;
+        break;
+      }
+      throw e;
+    }
   }
+
+  // Smoke test: verifica que `users` existe.
+  try {
+    await sql.query('SELECT 1 FROM users LIMIT 1', []);
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      const setupSql = SCHEMA_PG_STATEMENTS.map((s) => s.trim() + ';').join('\n\n');
+      const hint = permissionDenied
+        ? 'Sua role Neon não tem permissão para CREATE TABLE. Conecte-se ao Neon como owner (ou use o SQL Editor do console) e rode o schema abaixo, OU conceda permissões à role atual:\n\n' +
+          'GRANT USAGE, CREATE ON SCHEMA public TO <sua_role>;\n' +
+          'GRANT ALL ON ALL TABLES IN SCHEMA public TO <sua_role>;\n' +
+          'GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO <sua_role>;\n\n' +
+          'Schema completo:\n\n' + setupSql
+        : 'Tabelas não existem. Execute o schema no Neon:\n\n' + setupSql;
+      console.error('[db] schema ausente.\n' + hint);
+      throw new Error('Banco Neon sem as tabelas necessárias. Veja console (instruções de setup).');
+    }
+    throw e;
+  }
+
   return wrapper;
 }

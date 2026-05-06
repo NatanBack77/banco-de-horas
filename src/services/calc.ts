@@ -51,26 +51,33 @@ export async function computeWorkDayFromPunches(
 
 /** Validate next allowed punch type given existing punches today. */
 export function validateNextPunch(
-  existing: PunchRecord[], next: PunchRecord['type']
+  existing: PunchRecord[], next: PunchRecord['type'], time?: string
 ): { ok: boolean; reason?: string } {
   const types = existing.map(p => p.type);
+  let typeCheck: { ok: boolean; reason?: string } = { ok: true };
   switch (next) {
     case 'IN':
-      if (types.includes('IN')) return { ok: false, reason: 'Entrada já registrada hoje' };
-      return { ok: true };
+      if (types.includes('IN')) typeCheck = { ok: false, reason: 'Entrada já registrada hoje' };
+      break;
     case 'LUNCH_OUT':
-      if (!types.includes('IN')) return { ok: false, reason: 'Registre a entrada antes' };
-      if (types.includes('LUNCH_OUT')) return { ok: false, reason: 'Saída para almoço já registrada' };
-      return { ok: true };
+      if (!types.includes('IN')) typeCheck = { ok: false, reason: 'Registre a entrada antes' };
+      else if (types.includes('LUNCH_OUT')) typeCheck = { ok: false, reason: 'Saída para almoço já registrada' };
+      break;
     case 'LUNCH_IN':
-      if (!types.includes('LUNCH_OUT')) return { ok: false, reason: 'Registre a saída para almoço antes' };
-      if (types.includes('LUNCH_IN')) return { ok: false, reason: 'Retorno do almoço já registrado' };
-      return { ok: true };
+      if (!types.includes('LUNCH_OUT')) typeCheck = { ok: false, reason: 'Registre a saída para almoço antes' };
+      else if (types.includes('LUNCH_IN')) typeCheck = { ok: false, reason: 'Retorno do almoço já registrado' };
+      break;
     case 'OUT':
-      if (!types.includes('IN')) return { ok: false, reason: 'Registre a entrada antes' };
-      if (types.includes('OUT')) return { ok: false, reason: 'Saída já registrada' };
-      return { ok: true };
+      if (!types.includes('IN')) typeCheck = { ok: false, reason: 'Registre a entrada antes' };
+      else if (types.includes('OUT')) typeCheck = { ok: false, reason: 'Saída já registrada' };
+      break;
   }
+  if (!typeCheck.ok) return typeCheck;
+  if (time && existing.length) {
+    const last = existing.reduce((a, b) => (a.time > b.time ? a : b));
+    if (time <= last.time) return { ok: false, reason: `Horário deve ser maior que ${last.time}` };
+  }
+  return { ok: true };
 }
 
 export interface OvertimeBalance {

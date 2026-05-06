@@ -28,15 +28,15 @@ export async function updateUsage(id: number, patch: Partial<OvertimeUsage>): Pr
 }
 
 export async function sumUsedMinutes(userId: number): Promise<number> {
-  const r = await getDb().getFirstAsync<{ s: number }>(
+  const r = await getDb().getFirstAsync<{ s: number | string }>(
     `SELECT COALESCE(SUM(minutes),0) AS s FROM overtime_usage WHERE user_id=? AND status='USED'`, userId
   );
-  return r?.s ?? 0;
+  return Number(r?.s ?? 0);
 }
 
 export async function sumScheduledMinutes(userId: number): Promise<number> {
-  const r = await getDb().getFirstAsync<{ s: number }>(
+  const r = await getDb().getFirstAsync<{ s: number | string }>(
     `SELECT COALESCE(SUM(minutes),0) AS s FROM overtime_usage WHERE user_id=? AND status='SCHEDULED'`, userId
   );
-  return r?.s ?? 0;
+  return Number(r?.s ?? 0);
 }
