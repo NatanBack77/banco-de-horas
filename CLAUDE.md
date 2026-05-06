@@ -117,7 +117,7 @@ Use classes Tailwind: `bg-primary`, `text-cream`, `border-border`, etc.
 
 - Login via `AuthContext` (`useAuth()`). Sessão persistida em `localStorage['bdh_user_id']`.
 - Splash até `ready === true`, depois Login ou rotas protegidas (`<Protected>`).
-- Seed user: **`joao@saogeraldo.com` / `123456`** (criado em `seedIfEmpty`).
+- Sem seed: registre via `/register` na primeira execução (Neon começa vazio).
 
 ## Navegação
 

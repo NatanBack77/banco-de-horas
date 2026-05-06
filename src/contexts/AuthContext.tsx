@@ -6,7 +6,6 @@ const SecureStore = {
 };
 import { User, ContractType } from '@/types';
 import { initDatabase } from '@/database/db';
-import { seedIfEmpty } from '@/database/seed';
 import { createUser, findUserByEmail, getUser } from '@/database/repositories/userRepo';
 import { createShift, getDefaultShift } from '@/database/repositories/shiftRepo';
 import { hashPassword, verifyPassword } from '@/services/auth';
@@ -34,7 +33,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         await initDatabase();
-        try { await seedIfEmpty(); } catch (e) { console.warn('[seed] falhou (provável: role sem INSERT)', e); }
         const id = await SecureStore.getItemAsync(KEY).catch(() => null);
         if (id) {
           const u = await getUser(Number(id));
