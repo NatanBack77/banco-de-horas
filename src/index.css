@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #008943;
+  --color-primary-dark: #006B34;
+  --color-primary-light: #1FAE63;
+  --color-accent: #F15A29;
+  --color-accent-light: #FF7A4D;
+  --color-yellow: #F9C23C;
+  --color-brown: #5B3A17;
+  --color-cream: #FFF7E6;
+  --color-bg: #FFFBF2;
+  --color-surface: #FFFFFF;
+  --color-border: #EFE7D2;
+  --color-text: #1F1F1F;
+  --color-text-muted: #7A7568;
+  --color-text-soft: #A39B85;
+  --color-success: #008943;
+  --color-danger: #F15A29;
+  --color-warning: #F9C23C;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --font-sans: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-card: 0 6px 20px -8px rgba(91, 58, 23, 0.15), 0 2px 6px -2px rgba(91, 58, 23, 0.06);
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Desktop / tablet: paint cream + cajuína gradient outside the phone-shell */
+@media (min-width: 1024px) {
+  body {
+    background:
+      radial-gradient(ellipse at 12% 18%, rgba(249,194,60,0.18), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(241,90,41,0.15), transparent 55%),
+      var(--color-bg);
+  }
+}
+
+/* Responsive app shell — phone-first; tablet+ keeps comfy width; desktop frames as card */
+.app-shell {
+  width: 100%;
+  max-width: 36rem; /* xl */
+  margin-inline: auto;
+}
+@media (min-width: 1024px) {
+  .app-shell {
+    max-width: 42rem; /* 2xl-ish */
+  }
+}
+@media (min-width: 1280px) {
+  .app-shell {
+    max-width: 44rem;
+  }
+}
+
+body {
+  margin: 0;
+  overscroll-behavior-y: none;
+}
+
+* { box-sizing: border-box; }
+
+button { font-family: inherit; }
+
+/* Hide scrollbar utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Number input spinners off */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }

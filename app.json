@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Banco de Horas",
+    "slug": "banco-de-horas",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "bancodehoras",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF7E6"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.saogeraldo.bancodehoras"
+    },
+    "android": {
+      "package": "com.saogeraldo.bancodehoras",
+      "adaptiveIcon": {
+        "backgroundColor": "#008943"
+      }
+    },
+    "plugins": []
+  }
+}
