@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Trash2, SlidersHorizontal, Pencil, Save, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trash2, SlidersHorizontal, Pencil, Save, X, TrendingDown } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,6 +26,7 @@ export function RecordsScreen() {
   const [days, setDays] = useState<WorkDay[]>([]);
   const [usages, setUsages] = useState<OvertimeUsage[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const [hiddenAuto, setHiddenAuto] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTime, setEditTime] = useState('');
 
@@ -134,6 +135,10 @@ export function RecordsScreen() {
           const inProgress = inP && !outP;
           const dayUsages = usageMap.get(date) ?? [];
           const totalUsed = dayUsages.reduce((s, u) => s + u.minutes, 0);
+          const autoUsage = dayUsages.find(u => u.source === 'AUTO');
+          const manualUsages = dayUsages.filter(u => u.source !== 'AUTO');
+          const remainingShortfall = autoUsage && wd && wd.balance_minutes < 0 ? -wd.balance_minutes : 0;
+          const autoCardHidden = hiddenAuto.has(date);
           let pillText: string;
           let pillCls: string;
           if (inProgress) { pillText = 'Em andamento'; pillCls = 'bg-yellow/30 text-brown'; }
@@ -217,22 +222,81 @@ export function RecordsScreen() {
                   </ul>
 
                   {dayUsages.length > 0 && (
-                    <div className="pt-3 border-t border-border space-y-1.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Banco de horas</p>
-                      {dayUsages.map(u => (
-                        <div key={u.id} className="flex items-start justify-between gap-2 text-xs">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-brown shrink-0 mt-0.5" />
-                              <span className="text-text font-medium">-{minutesToHm(u.minutes)}</span>
-                              <span className="text-text-muted">({u.source === 'AUTO' ? 'automático' : 'manual'})</span>
+                    <div className="pt-3 border-t border-border space-y-2">
+                      {manualUsages.length > 0 && (
+                        <>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Banco de horas</p>
+                          {manualUsages.map(u => (
+                            <div key={u.id} className="flex items-start justify-between gap-2 text-xs">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-brown shrink-0 mt-0.5" />
+                                  <span className="text-text font-medium">-{minutesToHm(u.minutes)}</span>
+                                  <span className="text-text-muted">(manual)</span>
+                                </div>
+                                {u.reason && <p className="text-text-muted pl-3 mt-0.5">{u.reason}</p>}
+                              </div>
                             </div>
-                            {u.reason && <p className="text-text-muted pl-3 mt-0.5">{u.reason}</p>}
-                          </div>
+                          ))}
+                        </>
+                      )}
+
+                      {autoUsage && (
+                        <div className="rounded-xl bg-yellow/20 border border-yellow/40 p-3">
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHiddenAuto(prev => {
+                                const n = new Set(prev);
+                                n.has(date) ? n.delete(date) : n.add(date);
+                                return n;
+                              });
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <TrendingDown size={15} className="text-brown shrink-0" />
+                              <p className="text-xs font-bold text-brown">Banco utilizado automaticamente</p>
+                            </div>
+                            {autoCardHidden
+                              ? <ChevronDown size={15} className="text-brown" />
+                              : <ChevronUp size={15} className="text-brown" />}
+                          </button>
+
+                          {!autoCardHidden && (
+                            <ul className="space-y-2 text-xs mt-3">
+                              <li className="flex justify-between">
+                                <span className="text-text-muted">Saída prevista</span>
+                                <span className="font-semibold text-text">{shift?.exit_time ?? '--:--'}</span>
+                              </li>
+                              <li className="flex justify-between">
+                                <span className="text-text-muted">Saída realizada</span>
+                                <span className="font-semibold text-text">{outP?.time ?? '--:--'}</span>
+                              </li>
+                              <li className="flex justify-between border-t border-yellow/40 pt-2">
+                                <span className="text-text-muted">Tempo utilizado do banco</span>
+                                <span className="font-bold text-accent">-{minutesToHm(autoUsage.minutes)}</span>
+                              </li>
+                              {remainingShortfall > 0 && (
+                                <li className="flex justify-between">
+                                  <span className="text-text-muted">Déficit não coberto</span>
+                                  <span className="font-bold text-accent">-{minutesToHm(remainingShortfall)}</span>
+                                </li>
+                              )}
+                              {autoUsage.reason && autoUsage.reason !== 'Saída antecipada automática' && (
+                                <li className="flex justify-between gap-3">
+                                  <span className="text-text-muted shrink-0">Motivo</span>
+                                  <span className="font-semibold text-text text-right">{autoUsage.reason}</span>
+                                </li>
+                              )}
+                            </ul>
+                          )}
                         </div>
-                      ))}
+                      )}
+
                       {totalUsed > 0 && (
-                        <p className="text-xs text-brown font-semibold pt-1">Total: -{minutesToHm(totalUsed)}</p>
+                        <p className="text-xs text-brown font-semibold pt-1">Total utilizado: -{minutesToHm(totalUsed)}</p>
                       )}
                     </div>
                   )}

@@ -76,6 +76,7 @@ export function PunchScreen() {
       const wd = await computeWorkDayFromPunches(user.id, date, shift);
       await upsertWorkDay(wd);
 
+      let autoResult: AutoUsageResult | null = null;
       if (type === 'OUT' && wd.balance_minutes < 0) {
         const result = await autoApplyBankOnEarlyExit({
           userId: user.id,
@@ -83,13 +84,14 @@ export function PunchScreen() {
           workedMinutes: wd.worked_minutes,
           expectedMinutes: wd.expected_minutes,
         });
-        if (result && result.autoUsedMinutes > 0) setAutoUsage(result);
+        if (result && result.autoUsedMinutes > 0) autoResult = result;
       }
 
       await load();
       bumpVersion();
       setMsg({ kind: 'ok', text: `${FULL_LABEL[type]} registrada às ${time}` });
       setTime(nowHm());
+      if (autoResult) setAutoUsage(autoResult);
     } catch (e: any) {
       setMsg({ kind: 'err', text: e?.message ?? 'Falha ao registrar' });
     } finally {
