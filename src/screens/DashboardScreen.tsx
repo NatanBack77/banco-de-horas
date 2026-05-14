@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { listPunchesByDate } from '@/database/repositories/punchRepo';
 import { listWorkDaysMonth, sumBalanceAll, upsertWorkDay } from '@/database/repositories/workDayRepo';
-import { sumUsedMinutes, sumScheduledMinutes } from '@/database/repositories/overtimeRepo';
+import { sumUsedMinutes, sumScheduledMinutes, listUsagesByMonth } from '@/database/repositories/overtimeRepo';
 import { computeWorkDayFromPunches, validateNextPunch } from '@/services/calc';
 import { rulesFor } from '@/services/contract';
 import { format, hmToMinutes, minutesToHm, nowHm, signedHm, today, ym } from '@/utils/date';
@@ -63,14 +63,18 @@ export function DashboardScreen() {
     }
     setStats({ positive: pos, negative: neg, monthBalance: monthBal, available: net - used - scheduled });
 
+    const usages = await listUsagesByMonth(user.id, ym());
+    const usageMap = new Map<string, number>();
+    for (const u of usages) usageMap.set(u.date, (usageMap.get(u.date) ?? 0) + u.minutes);
+
     const map = new Map(days.map(d => [d.date, d]));
     const cur = new Date();
     const daysInMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate();
-    const data: { label: string; value: number }[] = [];
+    const data: { label: string; value: number; usageMinutes?: number }[] = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dStr = format(new Date(cur.getFullYear(), cur.getMonth(), day), 'yyyy-MM-dd');
       const wd = map.get(dStr);
-      data.push({ label: String(day), value: wd?.balance_minutes ?? 0 });
+      data.push({ label: String(day), value: wd?.balance_minutes ?? 0, usageMinutes: usageMap.get(dStr) });
     }
     setChart(data);
   }, [user, shift]);

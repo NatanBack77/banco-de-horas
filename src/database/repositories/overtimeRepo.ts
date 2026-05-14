@@ -1,12 +1,18 @@
 import { getDb } from '../db';
 import { OvertimeUsage } from '@/types';
 
-export async function addUsage(u: Omit<OvertimeUsage, 'id' | 'created_at'>): Promise<number> {
+export async function addUsage(u: Omit<OvertimeUsage, 'id' | 'created_at'> & { source?: 'MANUAL' | 'AUTO' }): Promise<number> {
   const r = await getDb().runAsync(
-    `INSERT INTO overtime_usage (user_id,minutes,date,reason,status) VALUES (?,?,?,?,?)`,
-    u.user_id, u.minutes, u.date, u.reason, u.status
+    `INSERT INTO overtime_usage (user_id,minutes,date,reason,status,source) VALUES (?,?,?,?,?,?)`,
+    u.user_id, u.minutes, u.date, u.reason, u.status, u.source ?? 'MANUAL'
   );
   return r.lastInsertRowId as number;
+}
+
+export async function getAutoUsageForDate(userId: number, date: string): Promise<OvertimeUsage | null> {
+  return (await getDb().getFirstAsync<OvertimeUsage>(
+    `SELECT * FROM overtime_usage WHERE user_id=? AND date=? AND source='AUTO' AND status='USED'`, userId, date
+  )) ?? null;
 }
 
 export async function listUsages(userId: number): Promise<OvertimeUsage[]> {
@@ -32,6 +38,13 @@ export async function sumUsedMinutes(userId: number): Promise<number> {
     `SELECT COALESCE(SUM(minutes),0) AS s FROM overtime_usage WHERE user_id=? AND status='USED'`, userId
   );
   return Number(r?.s ?? 0);
+}
+
+export async function listUsagesByMonth(userId: number, ym: string): Promise<OvertimeUsage[]> {
+  return getDb().getAllAsync<OvertimeUsage>(
+    `SELECT * FROM overtime_usage WHERE user_id=? AND substr(date,1,7)=? AND status!='CANCELED' ORDER BY date ASC`,
+    userId, ym
+  );
 }
 
 export async function sumScheduledMinutes(userId: number): Promise<number> {

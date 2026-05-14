@@ -7,8 +7,9 @@ import { BarChart } from '@/components/BarChart';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { listWorkDaysMonth } from '@/database/repositories/workDayRepo';
+import { listUsagesByMonth } from '@/database/repositories/overtimeRepo';
 import { format, formatPtMonth, minutesToHm, parse, signedHm } from '@/utils/date';
-import { WorkDay } from '@/types';
+import { OvertimeUsage, WorkDay } from '@/types';
 
 type Tab = 'summary' | 'detail';
 
@@ -19,10 +20,16 @@ export function ReportsScreen() {
   const [tab, setTab] = useState<Tab>('summary');
   const [yyyymm, setYyyymm] = useState(() => format(new Date(), 'yyyy-MM'));
   const [days, setDays] = useState<WorkDay[]>([]);
+  const [usages, setUsages] = useState<OvertimeUsage[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
-    setDays(await listWorkDaysMonth(user.id, yyyymm));
+    const [d, u] = await Promise.all([
+      listWorkDaysMonth(user.id, yyyymm),
+      listUsagesByMonth(user.id, yyyymm),
+    ]);
+    setDays(d);
+    setUsages(u);
   }, [user, yyyymm]);
 
   useEffect(() => { void load(); }, [load, version]);
@@ -39,18 +46,29 @@ export function ReportsScreen() {
     return { pos, neg, balance, worked, expected };
   }, [days]);
 
+  const usageMap = useMemo(() => {
+    const m = new Map<string, OvertimeUsage[]>();
+    for (const u of usages) {
+      if (!m.has(u.date)) m.set(u.date, []);
+      m.get(u.date)!.push(u);
+    }
+    return m;
+  }, [usages]);
+
   const chart = useMemo(() => {
     const map = new Map(days.map(d => [d.date, d]));
     const ref = parse(yyyymm + '-01', 'yyyy-MM-dd', new Date());
     const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
-    const out: { label: string; value: number }[] = [];
+    const out: { label: string; value: number; usageMinutes?: number }[] = [];
     for (let day = 1; day <= lastDay; day++) {
       const dStr = format(new Date(ref.getFullYear(), ref.getMonth(), day), 'yyyy-MM-dd');
       const wd = map.get(dStr);
-      out.push({ label: [1,15,22,lastDay].includes(day) ? String(day) : '', value: wd?.balance_minutes ?? 0 });
+      const dayUsages = usageMap.get(dStr);
+      const usageMinutes = dayUsages?.reduce((s, u) => s + u.minutes, 0);
+      out.push({ label: [1,15,22,lastDay].includes(day) ? String(day) : '', value: wd?.balance_minutes ?? 0, usageMinutes });
     }
     return out;
-  }, [days, yyyymm]);
+  }, [days, usages, yyyymm]);
 
   return (
     <div className="app-shell pb-24">
@@ -110,13 +128,32 @@ export function ReportsScreen() {
             <SectionLabel>Detalhado</SectionLabel>
             <ul className="divide-y divide-border">
               {days.length === 0 && <li className="py-3 text-sm text-text-muted">Sem dados.</li>}
-              {days.map(d => (
-                <li key={d.id} className="py-2.5 flex items-center justify-between text-sm">
-                  <span className="text-text">{d.date.slice(8)}/{d.date.slice(5,7)}</span>
-                  <span className="text-text-muted">{minutesToHm(d.worked_minutes)} / {minutesToHm(d.expected_minutes)}</span>
-                  <span className={`font-bold ${d.balance_minutes >= 0 ? 'text-primary' : 'text-accent'}`}>{signedHm(d.balance_minutes)}</span>
-                </li>
-              ))}
+              {days.map(d => {
+                const dayUsages = usageMap.get(d.date) ?? [];
+                const totalUsed = dayUsages.reduce((s, u) => s + u.minutes, 0);
+                return (
+                  <li key={d.id} className="py-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-text font-medium">{d.date.slice(8)}/{d.date.slice(5,7)}</span>
+                      <span className="text-text-muted">{minutesToHm(d.worked_minutes)} / {minutesToHm(d.expected_minutes)}</span>
+                      <span className={`font-bold ${d.balance_minutes >= 0 ? 'text-primary' : 'text-accent'}`}>{signedHm(d.balance_minutes)}</span>
+                    </div>
+                    {dayUsages.map(u => (
+                      <div key={u.id} className="flex items-center gap-2 pl-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-brown shrink-0" />
+                        <span className="text-[11px] text-brown">
+                          Banco: -{minutesToHm(u.minutes)}
+                          {u.source === 'AUTO' ? ' (automático)' : ' (manual)'}
+                          {u.reason && u.reason !== 'Saída antecipada automática' ? ` — ${u.reason}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                    {totalUsed > 0 && dayUsages.length > 1 && (
+                      <div className="pl-1 text-[11px] text-text-muted">Total utilizado: -{minutesToHm(totalUsed)}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         )}

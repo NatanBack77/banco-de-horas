@@ -70,6 +70,7 @@ export const SCHEMA_PG_STATEMENTS: string[] = [
     haptics_enabled INTEGER NOT NULL DEFAULT 1,
     weekly_goal_minutes INTEGER NOT NULL DEFAULT 0
   )`,
+  `ALTER TABLE overtime_usage ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'MANUAL'`,
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INTEGER NOT NULL,

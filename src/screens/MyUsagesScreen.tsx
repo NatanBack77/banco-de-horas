@@ -171,9 +171,16 @@ export function MyUsagesScreen() {
                       <div className="min-w-0">
                         <p className="text-sm capitalize text-text font-semibold">{formatPtDate(u.date)}</p>
                         <p className="text-text-muted text-xs mt-0.5">{u.reason || 'Sem motivo'}</p>
-                        <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_CLS[u.status]}`}>
-                          {STATUS_LABEL[u.status]}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_CLS[u.status]}`}>
+                            {STATUS_LABEL[u.status]}
+                          </span>
+                          {u.source === 'AUTO' && (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-brown/10 text-brown">
+                              Automático
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-text">{minutesToHm(u.minutes)}</p>

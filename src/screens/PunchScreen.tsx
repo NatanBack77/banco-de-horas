@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, Check, X, ChevronRight, Clock, Calendar } from 'lucide-react';
+import { LogIn, LogOut, Check, X, ChevronRight, Clock, Calendar, TrendingDown } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
@@ -8,9 +8,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { addPunch, listPunchesByDate } from '@/database/repositories/punchRepo';
 import { upsertWorkDay } from '@/database/repositories/workDayRepo';
-import { computeWorkDayFromPunches, validateNextPunch } from '@/services/calc';
+import { updateUsage } from '@/database/repositories/overtimeRepo';
+import { autoApplyBankOnEarlyExit, computeWorkDayFromPunches, validateNextPunch, AutoUsageResult } from '@/services/calc';
 import { rulesFor } from '@/services/contract';
-import { today, nowHm } from '@/utils/date';
+import { today, nowHm, minutesToHm, signedHm } from '@/utils/date';
 import { PunchRecord, PunchType } from '@/types';
 
 const FULL_LABEL: Record<PunchType, string> = {
@@ -38,6 +39,9 @@ export function PunchScreen() {
   const [punches, setPunches] = useState<PunchRecord[]>([]);
   const [busy, setBusy] = useState<PunchType | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [autoUsage, setAutoUsage] = useState<AutoUsageResult | null>(null);
+  const [note, setNote] = useState('');
+  const [noteSaved, setNoteSaved] = useState(false);
 
   // Permite escolher data/horário manualmente. Botão "Agora" reseta.
   const [date, setDate] = useState(today());
@@ -57,6 +61,9 @@ export function PunchScreen() {
   const onPunch = async (type: PunchType) => {
     if (!user || !shift) return;
     setMsg(null);
+    setAutoUsage(null);
+    setNote('');
+    setNoteSaved(false);
     if (!/^\d{2}:\d{2}$/.test(time)) {
       setMsg({ kind: 'err', text: 'Horário inválido (use HH:mm)' });
       return;
@@ -68,6 +75,17 @@ export function PunchScreen() {
       await addPunch({ user_id: user.id, type, date, time });
       const wd = await computeWorkDayFromPunches(user.id, date, shift);
       await upsertWorkDay(wd);
+
+      if (type === 'OUT' && wd.balance_minutes < 0) {
+        const result = await autoApplyBankOnEarlyExit({
+          userId: user.id,
+          date,
+          workedMinutes: wd.worked_minutes,
+          expectedMinutes: wd.expected_minutes,
+        });
+        if (result && result.autoUsedMinutes > 0) setAutoUsage(result);
+      }
+
       await load();
       bumpVersion();
       setMsg({ kind: 'ok', text: `${FULL_LABEL[type]} registrada às ${time}` });
@@ -127,6 +145,85 @@ export function PunchScreen() {
         {msg && (
           <Card delay={0} noAnimate className={msg.kind === 'ok' ? 'bg-primary/10 border-primary/30' : 'bg-accent/10 border-accent/30'}>
             <p className={`text-sm font-medium ${msg.kind === 'ok' ? 'text-primary' : 'text-accent'}`}>{msg.text}</p>
+          </Card>
+        )}
+
+        {autoUsage && (
+          <Card delay={0} noAnimate className="bg-yellow/20 border-yellow/40">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingDown size={18} className="text-brown shrink-0" />
+              <p className="text-sm font-bold text-brown">Banco de horas utilizado automaticamente</p>
+            </div>
+            <ul className="space-y-2 text-sm">
+              <li className="flex justify-between">
+                <span className="text-text-muted">Saída prevista</span>
+                <span className="font-semibold text-text">{shift?.exit_time}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-text-muted">Saída realizada</span>
+                <span className="font-semibold text-text">{time}</span>
+              </li>
+              <li className="flex justify-between border-t border-yellow/40 pt-2">
+                <span className="text-text-muted">Saldo anterior</span>
+                <span className="font-semibold text-text">{signedHm(autoUsage.bankBalanceBefore)}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-text-muted">Tempo utilizado do banco</span>
+                <span className="font-bold text-accent">-{minutesToHm(autoUsage.autoUsedMinutes)}</span>
+              </li>
+              {autoUsage.remainingShortfallMinutes > 0 && (
+                <li className="flex justify-between">
+                  <span className="text-text-muted">Déficit não coberto</span>
+                  <span className="font-bold text-accent">-{minutesToHm(autoUsage.remainingShortfallMinutes)}</span>
+                </li>
+              )}
+              <li className="flex justify-between border-t border-yellow/40 pt-2">
+                <span className="text-text-muted">Saldo restante</span>
+                <span className={`font-bold ${autoUsage.bankBalanceAfter >= 0 ? 'text-primary' : 'text-accent'}`}>
+                  {signedHm(autoUsage.bankBalanceAfter)}
+                </span>
+              </li>
+            </ul>
+            {autoUsage.remainingShortfallMinutes > 0 && (
+              <p className="text-xs text-accent mt-3">
+                Saldo insuficiente. Os {minutesToHm(autoUsage.remainingShortfallMinutes)} restantes foram lançados como débito.
+              </p>
+            )}
+            <div className="mt-4 pt-3 border-t border-yellow/40">
+              <p className="text-xs font-semibold text-brown mb-2">Motivo (opcional)</p>
+              {noteSaved ? (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-text">{note || 'Sem observação'}</p>
+                  <button
+                    onClick={() => setNoteSaved(false)}
+                    className="text-xs text-primary hover:underline ml-2 shrink-0"
+                  >
+                    Editar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Ex.: Consulta médica, compromisso pessoal..."
+                    className="flex-1 h-9 px-3 bg-cream/60 border border-yellow/50 rounded-xl text-sm text-text outline-none focus:border-brown placeholder:text-text-muted/60"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (autoUsage.usageId) {
+                        await updateUsage(autoUsage.usageId, { reason: note || 'Saída antecipada automática' });
+                      }
+                      setNoteSaved(true);
+                    }}
+                    className="h-9 px-3 rounded-xl bg-brown text-cream text-xs font-semibold shrink-0"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              )}
+            </div>
           </Card>
         )}
 

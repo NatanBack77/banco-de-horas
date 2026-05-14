@@ -6,10 +6,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { deletePunch, listPunchesByMonth, updatePunch } from '@/database/repositories/punchRepo';
 import { listWorkDaysMonth, upsertWorkDay } from '@/database/repositories/workDayRepo';
+import { listUsagesByMonth } from '@/database/repositories/overtimeRepo';
 import { computeWorkDayFromPunches } from '@/services/calc';
-import { format, formatPtMonth, parse, signedHm } from '@/utils/date';
+import { format, formatPtMonth, minutesToHm, parse, signedHm } from '@/utils/date';
 import { ptBR } from 'date-fns/locale';
-import { PunchRecord, WorkDay } from '@/types';
+import { OvertimeUsage, PunchRecord, WorkDay } from '@/types';
 
 function shiftMonth(yyyymm: string, delta: number): string {
   const d = parse(yyyymm + '-01', 'yyyy-MM-dd', new Date());
@@ -23,14 +24,21 @@ export function RecordsScreen() {
   const [yyyymm, setYyyymm] = useState(() => format(new Date(), 'yyyy-MM'));
   const [punches, setPunches] = useState<PunchRecord[]>([]);
   const [days, setDays] = useState<WorkDay[]>([]);
+  const [usages, setUsages] = useState<OvertimeUsage[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTime, setEditTime] = useState('');
 
   const load = useCallback(async () => {
     if (!user) return;
-    setPunches(await listPunchesByMonth(user.id, yyyymm));
-    setDays(await listWorkDaysMonth(user.id, yyyymm));
+    const [p, d, u] = await Promise.all([
+      listPunchesByMonth(user.id, yyyymm),
+      listWorkDaysMonth(user.id, yyyymm),
+      listUsagesByMonth(user.id, yyyymm),
+    ]);
+    setPunches(p);
+    setDays(d);
+    setUsages(u);
   }, [user, yyyymm]);
 
   useEffect(() => { void load(); }, [load, version]);
@@ -45,6 +53,14 @@ export function RecordsScreen() {
   }, [punches]);
 
   const dayMap = useMemo(() => new Map(days.map(d => [d.date, d])), [days]);
+  const usageMap = useMemo(() => {
+    const m = new Map<string, OvertimeUsage[]>();
+    for (const u of usages) {
+      if (!m.has(u.date)) m.set(u.date, []);
+      m.get(u.date)!.push(u);
+    }
+    return m;
+  }, [usages]);
 
   const onDelete = async (p: PunchRecord) => {
     if (!user || !shift) return;
@@ -116,6 +132,8 @@ export function RecordsScreen() {
           const inP = items.find(p => p.type === 'IN');
           const outP = items.find(p => p.type === 'OUT');
           const inProgress = inP && !outP;
+          const dayUsages = usageMap.get(date) ?? [];
+          const totalUsed = dayUsages.reduce((s, u) => s + u.minutes, 0);
           let pillText: string;
           let pillCls: string;
           if (inProgress) { pillText = 'Em andamento'; pillCls = 'bg-yellow/30 text-brown'; }
@@ -144,53 +162,81 @@ export function RecordsScreen() {
                       <p className="font-semibold text-text text-sm">{outP?.time ?? '--:--'}</p>
                     </div>
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${pillCls}`}>{pillText}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {totalUsed > 0 && (
+                      <span className="w-2 h-2 rounded-full bg-brown" title="Banco de horas utilizado" />
+                    )}
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${pillCls}`}>{pillText}</span>
+                  </div>
                 </div>
               </button>
 
               {isOpen && (
-                <ul className="mt-4 pt-4 border-t border-border space-y-2">
-                  {items.map(p => {
-                    const editing = editingId === p.id;
-                    return (
-                      <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-text-muted shrink-0">{p.type}</span>
-                        <span className="flex items-center gap-2">
-                          {editing ? (
-                            <input
-                              type="time"
-                              value={editTime}
-                              onChange={(e) => setEditTime(e.target.value)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-24 px-2 h-8 bg-cream border border-border rounded-lg text-sm font-semibold text-text outline-none focus:border-primary"
-                            />
-                          ) : (
-                            <span className="font-semibold text-text">{p.time}</span>
-                          )}
-                          {editing ? (
-                            <>
-                              <button onClick={(e) => { e.stopPropagation(); void saveEdit(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-primary/10 text-primary" aria-label="Salvar">
-                                <Save size={14} />
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-border text-text-muted" aria-label="Cancelar">
-                                <X size={14} />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-primary/10 text-primary" aria-label="Editar">
-                                <Pencil size={14} />
-                              </button>
-                              <button onClick={(e) => { e.stopPropagation(); void onDelete(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-accent/10 text-accent" aria-label="Apagar">
-                                <Trash2 size={14} />
-                              </button>
-                            </>
-                          )}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <div className="mt-4 pt-4 border-t border-border space-y-2">
+                  <ul className="space-y-2">
+                    {items.map(p => {
+                      const editing = editingId === p.id;
+                      return (
+                        <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="text-text-muted shrink-0">{p.type}</span>
+                          <span className="flex items-center gap-2">
+                            {editing ? (
+                              <input
+                                type="time"
+                                value={editTime}
+                                onChange={(e) => setEditTime(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-24 px-2 h-8 bg-cream border border-border rounded-lg text-sm font-semibold text-text outline-none focus:border-primary"
+                              />
+                            ) : (
+                              <span className="font-semibold text-text">{p.time}</span>
+                            )}
+                            {editing ? (
+                              <>
+                                <button onClick={(e) => { e.stopPropagation(); void saveEdit(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-primary/10 text-primary" aria-label="Salvar">
+                                  <Save size={14} />
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); cancelEdit(); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-border text-text-muted" aria-label="Cancelar">
+                                  <X size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-primary/10 text-primary" aria-label="Editar">
+                                  <Pencil size={14} />
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); void onDelete(p); }} className="w-7 h-7 grid place-items-center rounded-full hover:bg-accent/10 text-accent" aria-label="Apagar">
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {dayUsages.length > 0 && (
+                    <div className="pt-3 border-t border-border space-y-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Banco de horas</p>
+                      {dayUsages.map(u => (
+                        <div key={u.id} className="flex items-start justify-between gap-2 text-xs">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-brown shrink-0 mt-0.5" />
+                              <span className="text-text font-medium">-{minutesToHm(u.minutes)}</span>
+                              <span className="text-text-muted">({u.source === 'AUTO' ? 'automático' : 'manual'})</span>
+                            </div>
+                            {u.reason && <p className="text-text-muted pl-3 mt-0.5">{u.reason}</p>}
+                          </div>
+                        </div>
+                      ))}
+                      {totalUsed > 0 && (
+                        <p className="text-xs text-brown font-semibold pt-1">Total: -{minutesToHm(totalUsed)}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </Card>
           );

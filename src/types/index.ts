@@ -56,6 +56,7 @@ export interface OvertimeUsage {
   date: string;
   reason: string | null;
   status: 'USED' | 'SCHEDULED' | 'CANCELED';
+  source: 'MANUAL' | 'AUTO';
   created_at: string;
 }
 
