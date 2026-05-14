@@ -17,6 +17,7 @@ import { ScheduleOvertimeScreen } from '@/screens/ScheduleOvertimeScreen';
 import { MyUsagesScreen } from '@/screens/MyUsagesScreen';
 import { NotificationsScreen } from '@/screens/NotificationsScreen';
 import { ProfileScreen } from '@/screens/ProfileScreen';
+import { ForgotPasswordScreen } from '@/screens/ForgotPasswordScreen';
 import { SplashScreen } from '@/screens/SplashScreen';
 
 function InitErrorScreen({ error }: { error: string }) {
@@ -81,6 +82,7 @@ export function App() {
         <Routes>
           <Route path="/login" element={<PublicOnly><LoginScreen /></PublicOnly>} />
           <Route path="/register" element={<PublicOnly><RegisterScreen /></PublicOnly>} />
+          <Route path="/recuperar-senha" element={<PublicOnly><ForgotPasswordScreen /></PublicOnly>} />
 
           <Route element={<Protected><TabsLayout /></Protected>}>
             <Route path="/" element={<DashboardScreen />} />
