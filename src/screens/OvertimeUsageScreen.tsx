@@ -60,7 +60,7 @@ export function OvertimeUsageScreen() {
     if (minutes > available) { setErr('Você não possui saldo suficiente'); return; }
     setSaving(true);
     try {
-      await addUsage({ user_id: user.id, minutes, date, reason: reason || null, status: 'USED' });
+      await addUsage({ user_id: user.id, minutes, date, reason: reason || null, status: 'USED', source: 'MANUAL' });
       bumpVersion();
       nav(-1);
     } finally {

@@ -61,7 +61,7 @@ export function ScheduleOvertimeScreen() {
     if (minutes > available) { setErr('Saldo insuficiente'); return; }
     setSaving(true);
     try {
-      await addUsage({ user_id: user.id, minutes, date, reason: reason || null, status: 'SCHEDULED' });
+      await addUsage({ user_id: user.id, minutes, date, reason: reason || null, status: 'SCHEDULED', source: 'MANUAL' });
       bumpVersion();
       nav(-1);
     } finally {
