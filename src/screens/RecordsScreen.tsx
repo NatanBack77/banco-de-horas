@@ -10,7 +10,14 @@ import { listUsagesByMonth } from '@/database/repositories/overtimeRepo';
 import { computeWorkDayFromPunches } from '@/services/calc';
 import { format, formatPtMonth, minutesToHm, parse, signedHm } from '@/utils/date';
 import { ptBR } from 'date-fns/locale';
-import { OvertimeUsage, PunchRecord, WorkDay } from '@/types';
+import { OvertimeUsage, PunchRecord, PunchType, WorkDay } from '@/types';
+
+const PUNCH_LABELS: Record<PunchType, string> = {
+  IN: 'Entrada',
+  LUNCH_OUT: 'Saída almoço',
+  LUNCH_IN: 'Retorno',
+  OUT: 'Saída',
+};
 
 function shiftMonth(yyyymm: string, delta: number): string {
   const d = parse(yyyymm + '-01', 'yyyy-MM-dd', new Date());
@@ -29,6 +36,7 @@ export function RecordsScreen() {
   const [hiddenAuto, setHiddenAuto] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTime, setEditTime] = useState('');
+  const [editType, setEditType] = useState<PunchType>('IN');
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -76,6 +84,7 @@ export function RecordsScreen() {
   const startEdit = (p: PunchRecord) => {
     setEditingId(p.id);
     setEditTime(p.time);
+    setEditType(p.type);
   };
 
   const cancelEdit = () => {
@@ -86,7 +95,7 @@ export function RecordsScreen() {
   const saveEdit = async (p: PunchRecord) => {
     if (!user || !shift) return;
     if (!/^\d{2}:\d{2}$/.test(editTime)) { alert('Horário inválido (HH:mm)'); return; }
-    await updatePunch(p.id, { time: editTime });
+    await updatePunch(p.id, { time: editTime, type: editType });
     const wd = await computeWorkDayFromPunches(user.id, p.date, shift);
     await upsertWorkDay(wd);
     cancelEdit();
@@ -183,7 +192,20 @@ export function RecordsScreen() {
                       const editing = editingId === p.id;
                       return (
                         <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                          <span className="text-text-muted shrink-0">{p.type}</span>
+                          {editing ? (
+                            <select
+                              value={editType}
+                              onChange={(e) => setEditType(e.target.value as PunchType)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8 px-2 bg-cream border border-border rounded-lg text-xs font-semibold text-text outline-none focus:border-primary"
+                            >
+                              {(['IN', 'LUNCH_OUT', 'LUNCH_IN', 'OUT'] as PunchType[]).map(t => (
+                                <option key={t} value={t}>{PUNCH_LABELS[t]}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-text-muted shrink-0 text-xs">{PUNCH_LABELS[p.type]}</span>
+                          )}
                           <span className="flex items-center gap-2">
                             {editing ? (
                               <input
