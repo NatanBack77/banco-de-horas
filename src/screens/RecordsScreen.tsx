@@ -8,6 +8,7 @@ import { deletePunch, listPunchesByMonth, updatePunch } from '@/database/reposit
 import { listWorkDaysMonth, upsertWorkDay } from '@/database/repositories/workDayRepo';
 import { listUsagesByMonth } from '@/database/repositories/overtimeRepo';
 import { computeWorkDayFromPunches } from '@/services/calc';
+import { rulesFor } from '@/services/contract';
 import { format, formatPtMonth, minutesToHm, parse, signedHm } from '@/utils/date';
 import { ptBR } from 'date-fns/locale';
 import { OvertimeUsage, PunchRecord, PunchType, WorkDay } from '@/types';
@@ -37,6 +38,11 @@ export function RecordsScreen() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTime, setEditTime] = useState('');
   const [editType, setEditType] = useState<PunchType>('IN');
+
+  const lunchOn = user ? rulesFor(user.contract_type).lunchRequired : true;
+  const allowedPunchTypes: PunchType[] = lunchOn
+    ? ['IN', 'LUNCH_OUT', 'LUNCH_IN', 'OUT']
+    : ['IN', 'OUT'];
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -199,7 +205,7 @@ export function RecordsScreen() {
                               onClick={(e) => e.stopPropagation()}
                               className="h-8 px-2 bg-cream border border-border rounded-lg text-xs font-semibold text-text outline-none focus:border-primary"
                             >
-                              {(['IN', 'LUNCH_OUT', 'LUNCH_IN', 'OUT'] as PunchType[]).map(t => (
+                              {allowedPunchTypes.map(t => (
                                 <option key={t} value={t}>{PUNCH_LABELS[t]}</option>
                               ))}
                             </select>
