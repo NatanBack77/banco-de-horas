@@ -37,6 +37,7 @@ export function PunchScreen() {
   const { user } = useAuth();
   const { shift, bumpVersion } = useSettings();
   const [punches, setPunches] = useState<PunchRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<PunchType | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [autoUsage, setAutoUsage] = useState<AutoUsageResult | null>(null);
@@ -49,7 +50,9 @@ export function PunchScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
     setPunches(await listPunchesByDate(user.id, date));
+    setLoading(false);
   }, [user, date]);
   useEffect(() => { void load(); }, [load]);
 
@@ -230,7 +233,7 @@ export function PunchScreen() {
         )}
 
         <button
-          disabled={!entryAction || busy != null}
+          disabled={loading || !entryAction || busy != null}
           onClick={() => entryAction && onPunch(entryAction)}
           className="w-full text-left disabled:opacity-50"
         >
@@ -249,7 +252,7 @@ export function PunchScreen() {
         </button>
 
         <button
-          disabled={!exitAction || busy != null}
+          disabled={loading || !exitAction || busy != null}
           onClick={() => exitAction && onPunch(exitAction)}
           className="w-full text-left disabled:opacity-50"
         >
